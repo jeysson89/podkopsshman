@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
@@ -18,15 +20,11 @@ namespace SshTunnelApp.Services
             return await ssh.RunCommandAsync(command);
         }
 
-        /// <summary>
-        /// Получает ВСЕ значения urltest_proxy_links через регулярное выражение.
-        /// </summary>
         public async Task<List<string>> GetUrltestLinksAsync(string tunnelName)
         {
             string output = await ssh.RunCommandAsync($"uci show podkop.{tunnelName}");
             var links = new List<string>();
-
-            foreach (var line in output.Split('\n', System.StringSplitOptions.RemoveEmptyEntries))
+            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
                 string trimmed = line.Trim();
                 if (trimmed.StartsWith($"podkop.{tunnelName}.urltest_proxy_links="))
@@ -44,9 +42,37 @@ namespace SshTunnelApp.Services
             return links;
         }
 
+        public async Task<string> GetUserDomainsTextAsync(string tunnelName)
+        {
+            string output = await ssh.RunCommandAsync($"uci get podkop.{tunnelName}.user_domains_text");
+            return output.Trim();
+        }
+
         /// <summary>
-        /// Безопасно добавляет ссылку в список (одинарные кавычки с экранированием).
+        /// Нормализует ввод доменов: разделяет по пробелам, запятым, переносам строк,
+        /// удаляет пустые строки и дубли, возвращает строку с '\n' в качестве разделителя.
         /// </summary>
+        public string NormalizeDomainsText(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return string.Empty;
+            var separators = new[] { ' ', ',', ';', '\n', '\r' };
+            var domains = input.Split(separators, StringSplitOptions.RemoveEmptyEntries)
+                               .Select(d => d.Trim())
+                               .Where(d => !string.IsNullOrEmpty(d))
+                               .Distinct()
+                               .ToList();
+            return string.Join("\n", domains);
+        }
+
+        public async Task SetUserDomainsTextAsync(string tunnelName, string domainsText)
+        {
+            string escaped = domainsText.Replace("'", "'\\''");
+            await ssh.RunCommandAsync($"uci set podkop.{tunnelName}.user_domains_text='{escaped}'");
+            await ssh.RunCommandAsync("uci commit podkop");
+            await ssh.RunCommandAsync("/etc/init.d/podkop reload");
+        }
+
         public async Task AddUrltestLinkAsync(string tunnelName, string link)
         {
             string escaped = EscapeForShell(link);
@@ -55,9 +81,6 @@ namespace SshTunnelApp.Services
             await ssh.RunCommandAsync("/etc/init.d/podkop reload");
         }
 
-        /// <summary>
-        /// Удаляет конкретную ссылку из списка.
-        /// </summary>
         public async Task DeleteUrltestLinkAsync(string tunnelName, string link)
         {
             string escaped = EscapeForShell(link);
@@ -66,9 +89,6 @@ namespace SshTunnelApp.Services
             await ssh.RunCommandAsync("/etc/init.d/podkop reload");
         }
 
-        /// <summary>
-        /// Устанавливает значение proxy_string с правильным экранированием.
-        /// </summary>
         public async Task SetProxyStringAsync(string tunnelName, string proxyString)
         {
             string escaped = EscapeForShell(proxyString);
@@ -77,10 +97,6 @@ namespace SshTunnelApp.Services
             await ssh.RunCommandAsync("/etc/init.d/podkop reload");
         }
 
-        /// <summary>
-        /// Экранирует строку для безопасного использования внутри одинарных кавычек в shell.
-        /// Заменяет кажду одиночную кавычку на '\'' (закрыть кавычку, добавить \', открыть кавычку).
-        /// </summary>
         private string EscapeForShell(string input)
         {
             return input.Replace("'", "'\\''");

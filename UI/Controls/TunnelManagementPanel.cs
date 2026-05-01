@@ -21,33 +21,36 @@ namespace SshTunnelApp.UI.Controls
             tunnelService = tunnelSvc;
             editPanel = tunnelEditPanel;
             mainForm = form;
-            this.Size = new Size(600, 580);   // увеличена высота до 580
+            this.AutoSize = true;
+            this.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             InitializeComponents();
         }
 
         private void InitializeComponents()
         {
-            listTunnels = new ListBox
-            {
-                Location = new Point(5, 5),
-                Size = new Size(200, 150),
-                IntegralHeight = false
-            };
+            listTunnels = new ListBox { Location = new Point(5, 5), Size = new Size(200, 150), IntegralHeight = false };
             listTunnels.SelectedIndexChanged += ListTunnels_SelectedIndexChanged;
 
             btnDetails = new Button { Text = "Подробнее", Location = new Point(5, 160), Size = new Size(90, 25), Enabled = false };
             btnDetails.Click += BtnDetails_Click;
-
             btnAdd = new Button { Text = "Добавить", Location = new Point(100, 160), Size = new Size(90, 25) };
             btnAdd.Click += BtnAdd_Click;
-
             btnDelete = new Button { Text = "Удалить", Location = new Point(195, 160), Size = new Size(90, 25), Enabled = false };
             btnDelete.Click += BtnDelete_Click;
 
-            // Панель редактирования размещаем с достаточным отступом
             editPanel.Location = new Point(5, 195);
+            editPanel.VisibleChanged += (s, e) => AdjustSize();
 
             Controls.AddRange(new Control[] { listTunnels, btnDetails, btnAdd, btnDelete, editPanel });
+            AdjustSize();
+        }
+
+        private void AdjustSize()
+        {
+            if (editPanel.Visible)
+                this.Height = editPanel.Bottom + 5;
+            else
+                this.Height = btnDelete.Bottom + 5;
         }
 
         private void ListTunnels_SelectedIndexChanged(object? sender, EventArgs e)

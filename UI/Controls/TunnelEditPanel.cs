@@ -17,19 +17,22 @@ namespace SshTunnelApp.UI.Controls
         private string? currentTunnelName;
         private PodkopTunnelEditorService editorService;
 
+        private Label lblDomains;
+        private TextBox txtDomains;
+        private Button btnSaveDomains, btnMassAddDomains, btnClearDomains;
+
         public TunnelEditPanel(PodkopTunnelEditorService editorSvc, MainForm form)
         {
             editorService = editorSvc;
-            this.Size = new Size(580, 360);   // увеличена высота
+            this.Size = new Size(580, 500);
+            this.Visible = false;
             InitializeComponents();
         }
 
         private void InitializeComponents()
         {
-            // Тип туннеля
             lblType = new Label { Text = "Тип: не выбран", Location = new Point(10, 10), AutoSize = true };
 
-            // Текстовое поле с деталями (увеличена высота до 120)
             txtTunnelDetails = new TextBox
             {
                 Location = new Point(10, 35),
@@ -40,7 +43,6 @@ namespace SshTunnelApp.UI.Controls
                 Font = new Font("Consolas", 9)
             };
 
-            // Кнопка "Обновить детали" – справа от текстового поля
             btnRefreshDetails = new Button
             {
                 Text = "Обновить",
@@ -49,7 +51,6 @@ namespace SshTunnelApp.UI.Controls
             };
             btnRefreshDetails.Click += async (s, e) => await LoadTunnelDetails(currentTunnelName);
 
-            // Список ссылок urltest (увеличена высота до 120)
             lstUrltestLinks = new ListBox
             {
                 Location = new Point(10, 165),
@@ -57,7 +58,6 @@ namespace SshTunnelApp.UI.Controls
                 Visible = false
             };
 
-            // Кнопки для urltest
             btnAddUrltestLink = new Button
             {
                 Text = "Добавить URL",
@@ -87,7 +87,6 @@ namespace SshTunnelApp.UI.Controls
             };
             btnEditUrltestLink.Click += BtnEditUrltestLink_Click;
 
-            // Кнопка для proxy_string (внизу)
             btnSetProxyString = new Button
             {
                 Text = "Изменить proxy_string",
@@ -97,7 +96,6 @@ namespace SshTunnelApp.UI.Controls
             };
             btnSetProxyString.Click += BtnSetProxyString_Click;
 
-            // Логика выбора ссылки
             lstUrltestLinks.SelectedIndexChanged += (s, e) =>
             {
                 bool hasSel = lstUrltestLinks.SelectedItem != null;
@@ -105,9 +103,64 @@ namespace SshTunnelApp.UI.Controls
                 btnEditUrltestLink.Enabled = hasSel;
             };
 
-            Controls.AddRange(new Control[] { lblType, txtTunnelDetails, btnRefreshDetails,
-                                              lstUrltestLinks, btnAddUrltestLink, btnDeleteUrltestLink, btnEditUrltestLink,
-                                              btnSetProxyString });
+            lblDomains = new Label
+            {
+                Text = "Домены (user_domains_text)",
+                Location = new Point(10, 355),
+                AutoSize = true,
+                Visible = false
+            };
+
+            txtDomains = new TextBox
+            {
+                Location = new Point(10, 375),
+                Size = new Size(470, 70),
+                Multiline = true,
+                ScrollBars = ScrollBars.Vertical,
+                Visible = false,
+                Font = new Font("Consolas", 9)
+            };
+
+            btnSaveDomains = new Button
+            {
+                Text = "Сохранить домены",
+                Location = new Point(490, 375),
+                Size = new Size(80, 25),
+                Visible = false
+            };
+            btnSaveDomains.Click += async (s, e) => await SaveDomains();
+
+            btnMassAddDomains = new Button
+            {
+                Text = "Массово добавить",
+                Location = new Point(490, 405),
+                Size = new Size(80, 25),
+                Visible = false
+            };
+            btnMassAddDomains.Click += BtnMassAddDomains_Click;
+
+            btnClearDomains = new Button
+            {
+                Text = "Очистить",
+                Location = new Point(490, 435),
+                Size = new Size(80, 25),
+                Visible = false
+            };
+            btnClearDomains.Click += async (s, e) =>
+            {
+                if (MessageBox.Show("Очистить все домены?", "Подтверждение", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                {
+                    txtDomains.Text = "";
+                    await SaveDomains();
+                }
+            };
+
+            Controls.AddRange(new Control[] {
+                lblType, txtTunnelDetails, btnRefreshDetails,
+                lstUrltestLinks, btnAddUrltestLink, btnDeleteUrltestLink, btnEditUrltestLink,
+                btnSetProxyString,
+                lblDomains, txtDomains, btnSaveDomains, btnMassAddDomains, btnClearDomains
+            });
         }
 
         public async Task LoadTunnelDetails(string? tunnelName)
@@ -115,12 +168,16 @@ namespace SshTunnelApp.UI.Controls
             currentTunnelName = tunnelName;
             if (string.IsNullOrEmpty(tunnelName))
             {
-                txtTunnelDetails.Text = "Нет выбранного туннеля.";
+                this.Visible = false;
+                txtTunnelDetails.Text = "";
                 lblType.Text = "Тип: не выбран";
+                lstUrltestLinks.Items.Clear();
                 HideAllControls();
                 return;
             }
 
+            this.Visible = true;
+            this.Size = new Size(580, 500);
             try
             {
                 string output = await editorService.RunCommandAsync($"uci show podkop.{tunnelName}");
@@ -132,6 +189,8 @@ namespace SshTunnelApp.UI.Controls
                                 (output.Contains("'proxy'") || output.Contains("\"proxy\"")))
                                || output.Contains("proxy_string=");
 
+                bool hasDomains = output.Contains("user_domains_text=");
+
                 lblType.Text = isUrltest ? "Тип: urltest (url)" :
                                isProxy ? "Тип: proxy" : "Тип: обычный";
 
@@ -140,12 +199,26 @@ namespace SshTunnelApp.UI.Controls
                 btnAddUrltestLink.Visible = isUrltest;
                 btnDeleteUrltestLink.Visible = isUrltest;
                 btnEditUrltestLink.Visible = isUrltest;
+                btnRefreshDetails.Visible = true;
+
+                bool showDomains = hasDomains;
+                lblDomains.Visible = showDomains;
+                txtDomains.Visible = showDomains;
+                btnSaveDomains.Visible = showDomains;
+                btnMassAddDomains.Visible = showDomains;
+                btnClearDomains.Visible = showDomains;
 
                 if (isUrltest)
                 {
                     var links = await editorService.GetUrltestLinksAsync(tunnelName);
                     lstUrltestLinks.Items.Clear();
                     lstUrltestLinks.Items.AddRange(links.ToArray());
+                }
+
+                if (hasDomains)
+                {
+                    string domains = await editorService.GetUserDomainsTextAsync(tunnelName);
+                    txtDomains.Text = domains.Replace("\n", Environment.NewLine);
                 }
             }
             catch (Exception ex)
@@ -163,8 +236,68 @@ namespace SshTunnelApp.UI.Controls
             btnAddUrltestLink.Visible = false;
             btnDeleteUrltestLink.Visible = false;
             btnEditUrltestLink.Visible = false;
+            btnRefreshDetails.Visible = false;
+            lblDomains.Visible = false;
+            txtDomains.Visible = false;
+            btnSaveDomains.Visible = false;
+            btnMassAddDomains.Visible = false;
+            btnClearDomains.Visible = false;
         }
 
+        private async Task SaveDomains()
+        {
+            if (string.IsNullOrEmpty(currentTunnelName)) return;
+            try
+            {
+                string normalized = editorService.NormalizeDomainsText(txtDomains.Text);
+                await editorService.SetUserDomainsTextAsync(currentTunnelName, normalized);
+                await LoadTunnelDetails(currentTunnelName);
+                MessageBox.Show("Домены сохранены.", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка сохранения доменов: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private async void BtnMassAddDomains_Click(object? sender, EventArgs e)
+        {
+            if (string.IsNullOrEmpty(currentTunnelName)) return;
+
+            string input = Prompt.ShowDialog("Введите домены (через пробел, запятую или с новой строки):", "Массовое добавление");
+            if (string.IsNullOrWhiteSpace(input)) return;
+
+            string newNormalized = editorService.NormalizeDomainsText(input);
+            if (string.IsNullOrEmpty(newNormalized)) return;
+
+            string currentNormalized = editorService.NormalizeDomainsText(txtDomains.Text);
+            var currentList = currentNormalized.Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
+            var newList = newNormalized.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            bool added = false;
+            foreach (var domain in newList)
+            {
+                if (!currentList.Contains(domain))
+                {
+                    currentList.Add(domain);
+                    added = true;
+                }
+            }
+
+            if (added)
+            {
+                string merged = string.Join("\n", currentList);
+                await editorService.SetUserDomainsTextAsync(currentTunnelName, merged);
+                await LoadTunnelDetails(currentTunnelName);
+                MessageBox.Show("Новые домены добавлены.", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else
+            {
+                MessageBox.Show("Новых доменов не найдено.", "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        // ... остальные методы (AddUrltestLink, DeleteUrltestLink, EditUrltestLink, SetProxyString) без изменений ...
         private async void BtnAddUrltestLink_Click(object? sender, EventArgs e)
         {
             if (string.IsNullOrEmpty(currentTunnelName)) return;
